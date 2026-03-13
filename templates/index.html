@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MyCompressTool</title>
+<link rel="icon" href="{{ url_for('static', filename='pngegg.png') }}">
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg,#eef2f7,#dbe6f6);
+    text-align: center;
+    padding: 60px;
+}
+
+.container {
+    background: white;
+    width: 420px;
+    margin: auto;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: #1a73e8;
+    font-size: 38px;
+    margin-bottom: 20px;
+}
+
+h1 img {
+    height: 50px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+input[type="file"] {
+    margin: 20px 0;
+    padding: 10px;
+}
+
+.upload-btn {
+    background-color: #1a73e8;
+    color: white;
+    padding: 12px 30px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.upload-btn:hover {
+    background-color: #155ab6;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>
+        <img src="{{ url_for('static', filename='pngegg.png') }}" alt="Logo">
+        MyCompressTool
+    </h1>
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <br>
+        <button class="upload-btn" type="submit">Compress / Optimize</button>
+    </form>
+</div>
+</body>
+</html>
