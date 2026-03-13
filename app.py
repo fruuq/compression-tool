@@ -31,9 +31,7 @@ def index():
 
         # PDF compression
         if ext == ".pdf":
-
             output_path = os.path.join(COMPRESSED_FOLDER, f"compressed_{file.filename}")
-
             try:
                 subprocess.run([
                     "gs",
@@ -51,11 +49,8 @@ def index():
 
         # Image compression
         elif ext in [".jpg", ".jpeg", ".png"]:
-
             output_path = os.path.join(COMPRESSED_FOLDER, f"compressed_{file.filename}")
-
             img = Image.open(input_path)
-
             if ext in [".jpg", ".jpeg"]:
                 img.save(output_path, "JPEG", quality=70, optimize=True)
             else:
@@ -63,9 +58,7 @@ def index():
 
         # Other files
         else:
-
             output_path = os.path.join(COMPRESSED_FOLDER, f"{filename}.zip")
-
             with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 zipf.write(input_path, arcname=file.filename)
 
@@ -84,10 +77,6 @@ def index():
 
 
 if __name__ == "__main__":
-
     port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    # لا تشغل debug=True على Render
+    app.run(host="0.0.0.0", port=port)
