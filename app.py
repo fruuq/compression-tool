@@ -3,6 +3,7 @@ from PIL import Image
 import os
 import zipfile
 import subprocess
+import shutil
 
 app = Flask(__name__)
 
@@ -11,6 +12,37 @@ COMPRESSED_FOLDER = "compressed"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
+
+
+def compress_pdf(input_path, output_path):
+    #try to find Ghostscript
+    gs_path = shutil.which("gs")
+
+    if gs_path is None:
+        gs_path = r"C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe"
+
+    try:
+        result = subprocess.run([
+            gs_path,
+            "-sDEVICE=pdfwrite",
+            "-dCompatibilityLevel=1.4",
+            "-dPDFSETTINGS=/screen", 
+            "-dDownsampleColorImages=true",
+            "-dColorImageResolution=72",
+            "-dNOPAUSE",
+            "-dBATCH",
+            f"-sOutputFile={output_path}",
+            input_path
+        ], check=True, capture_output=True, text=True)
+
+        print(result.stdout)
+        print(result.stderr)
+
+        return True
+
+    except Exception as e:
+        print("PDF Compression Error:", e)
+        return False
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -29,42 +61,42 @@ def index():
         filename, ext = os.path.splitext(file.filename)
         ext = ext.lower()
 
-        # PDF compression
+        # PDF
         if ext == ".pdf":
-            output_path = os.path.join(COMPRESSED_FOLDER, f"compressed_{file.filename}")
-            try:
-                subprocess.run([
-                    "gs",
-                    "-sDEVICE=pdfwrite",
-                    "-dCompatibilityLevel=1.4",
-                    "-dPDFSETTINGS=/ebook",
-                    "-dNOPAUSE",
-                    "-dQUIET",
-                    "-dBATCH",
-                    f"-sOutputFile={output_path}",
-                    input_path
-                ])
-            except:
+
+            output_path = os.path.join(
+                COMPRESSED_FOLDER, f"compressed_{file.filename}")
+
+            success = compress_pdf(input_path, output_path)
+
+            if not success:
+                print("Compression failed, returning original file")
                 output_path = input_path
 
-        # Image compression
+        # Images
         elif ext in [".jpg", ".jpeg", ".png"]:
-            output_path = os.path.join(COMPRESSED_FOLDER, f"compressed_{file.filename}")
+
+            output_path = os.path.join(
+                COMPRESSED_FOLDER, f"compressed_{file.filename}")
+
             img = Image.open(input_path)
+
             if ext in [".jpg", ".jpeg"]:
-                img.save(output_path, "JPEG", quality=70, optimize=True)
+                img.save(output_path, "JPEG", quality=50, optimize=True)
+
             else:
                 img.save(output_path, "PNG", optimize=True)
 
         # Other files
         else:
+
             output_path = os.path.join(COMPRESSED_FOLDER, f"{filename}.zip")
+
             with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 zipf.write(input_path, arcname=file.filename)
 
         response = send_file(output_path, as_attachment=True)
 
-        # حذف الملفات بعد الإرسال
         try:
             os.remove(input_path)
             os.remove(output_path)
@@ -78,5 +110,4 @@ def index():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    # لا تشغل debug=True على Render
     app.run(host="0.0.0.0", port=port)
