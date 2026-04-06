@@ -1,20 +1,17 @@
-# Dockerfile
 FROM python:3.11-slim
 
-# تثبيت dependencies المطلوبة لـ Pillow
-RUN apt-get update && apt-get install -y libjpeg-dev zlib1g-dev libpng-dev && rm -rf /var/lib/apt/lists/*
+# تثبيت Ghostscript + أدوات النظام الأساسية
+RUN apt-get update && \
+    apt-get install -y ghostscript && \
+    rm -rf /var/lib/apt/lists/*
 
-# إنشاء مجلد المشروع
 WORKDIR /app
-
-# نسخ الملفات
-COPY . /app
-
-# تثبيت بايثون requirements
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN apt-get update && apt-get install -y ghostscript
-# فتح المنفذ 5000
-EXPOSE 5000
 
-# أمر التشغيل
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:5000"]
+COPY . .
+RUN mkdir -p uploads compressed
+
+ENV PORT=10000
+# استخدام Gunicorn بدل app.run() للإنتاج
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:$PORT", "app:app"]
