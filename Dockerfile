@@ -16,4 +16,5 @@ COPY . .
 RUN mkdir -p uploads compressed
 
 ENV PORT=10000
+
 CMD exec gunicorn -w 2 -b 0.0.0.0:$PORT app:app --log-file -
