@@ -4,7 +4,6 @@ import uuid
 import shutil
 import subprocess
 import logging
-import unicodedata
 from flask import Flask, render_template, request, send_file, g
 from PIL import Image
 from werkzeug.utils import secure_filename
@@ -57,7 +56,7 @@ def compress_pdf(input_path, output_path):
             gs_path,
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.4",
-            "-dPDFSETTINGS=/screen",  # أقل جودة = حجم أصغر
+            "-dPDFSETTINGS=/screen",
             "-dDownsampleColorImages=true",
             "-dColorImageResolution=72",
             "-dNOPAUSE",
@@ -74,22 +73,6 @@ def compress_pdf(input_path, output_path):
     except Exception as e:
         logger.error(f"❌ خطأ غير متوقع في ضغط PDF: {e}")
         return False
-
-
-def sanitize_download_name(filename):
-    """
-    تنظيف اسم الملف للتحميل ليدعم المتصفحات والأحرف العربية.
-    يحول الأحرف العربية لأحرف لاتينية مقاربة، أو يستخدم اسم بديل.
-    """
-    # محاولة تحويل الأحرف العربية لإنجليزية (Transliteration)
-    normalized = unicodedata.normalize('NFKD', filename).encode('ASCII', 'ignore').decode('ASCII')
-    
-    # إذا أصبح الاسم فارغًا (لأنه كان عربيًا بالكامل)، نستخدم اسمًا افتراضيًا
-    if not normalized.strip():
-        name, ext = os.path.splitext(filename)
-        return f"compressed_file{ext}"
-    
-    return f"compressed_{normalized}"
 
 
 @app.errorhandler(413)
@@ -177,15 +160,16 @@ def index():
                     logger.error(f"❌ خطأ في ضغط PNG: {e}")
                     output_path = input_path
 
-            # 5. تجهيز الاسم للتحميل (Download Name)
-            # نستخدم دالة التنظيف لضمان توافق الاسم مع جميع المتصفحات
-            download_name = sanitize_download_name(original_filename)
+            # 5. تجهيز الاسم للتحميل (الحفاظ على العربية ✅)
+            # تنظيف بسيط لمنع رموز المسار الخطرة فقط
+            safe_name = original_filename.replace("/", "_").replace("\\", "_")
+            download_name = f"compressed_{safe_name}"
 
-            # 6. إرسال الملف
+            # 6. إرسال الملف (Flask يتعامل مع العربية تلقائيًا عبر UTF-8)
             return send_file(
                 output_path,
                 as_attachment=True,
-                download_name=download_name  # يعمل مع Flask >= 2.0
+                download_name=download_name
             )
 
         except Exception as e:
