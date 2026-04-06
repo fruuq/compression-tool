@@ -6,8 +6,6 @@ import subprocess
 import logging
 from flask import Flask, render_template, request, send_file, g
 from PIL import Image
-from werkzeug.utils import secure_filename
-from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
 
@@ -41,7 +39,7 @@ def get_ghostscript_path():
         path = shutil.which(cmd)
         if path:
             return path
-    # مسار احتياطي لويندوز (يمكن تعديله حسب إصدارك)
+    # مسار احتياطي لويندوز
     fallback = r"C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe"
     if os.path.exists(fallback):
         return fallback
@@ -96,7 +94,6 @@ def cleanup_temp_files(response):
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
-                    logger.debug(f"🗑️ تم حذف: {file_path}")
             except Exception as e:
                 logger.warning(f"⚠️ تعذر حذف الملف: {file_path} | {e}")
     return response
@@ -119,17 +116,17 @@ def index():
                 return "🚫 نوع الملف غير مدعوم. المسموح: PDF, JPG, PNG", 400
 
             # 3. تجهيز المسارات
-            original_filename = file.filename  # حفظ الاسم الأصلي (عربي/إنجليزي)
+            original_filename = file.filename
             _, ext = os.path.splitext(original_filename)
             ext = ext.lower()
             
-            # اسم داخلي آمن للتخزين (UUID) لتجنب مشاكل التسمية والتكرار
+            # اسم داخلي آمن للتخزين (UUID)
             safe_internal_name = f"{uuid.uuid4()}{ext}"
             
             input_path = os.path.join(app.config["UPLOAD_FOLDER"], safe_internal_name)
             file.save(input_path)
 
-            output_path = os.path.join(app.config["COMPRESSED_FOLDER"], f"compressed_{safe_internal_name}")
+            output_path = os.path.join(app.config["COMPRESSED_FOLDER"], f"{safe_internal_name}")
             
             # تسجيل الملفات للحذف التلقائي لاحقًا
             g.files_to_cleanup = list({input_path, output_path})
@@ -143,7 +140,6 @@ def index():
             elif ext in [".jpg", ".jpeg"]:
                 try:
                     with Image.open(input_path) as img:
-                        # تحويل لـ RGB لتجنب أخطاء الشفافية في JPEG
                         img.convert("RGB").save(
                             output_path, "JPEG", quality=60, optimize=True, progressive=True
                         )
@@ -154,18 +150,16 @@ def index():
             elif ext == ".png":
                 try:
                     with Image.open(input_path) as img:
-                        # حفظ PNG مع ضغط عالٍ
                         img.save(output_path, "PNG", optimize=True, compress_level=9)
                 except Exception as e:
                     logger.error(f"❌ خطأ في ضغط PNG: {e}")
                     output_path = input_path
 
-            # 5. تجهيز الاسم للتحميل (الحفاظ على العربية ✅)
-            # تنظيف بسيط لمنع رموز المسار الخطرة فقط
+            # ✅ 5. تجهيز الاسم للتحميل: يحافظ على العربي/الإنجليزي كما هو + compressed_
             safe_name = original_filename.replace("/", "_").replace("\\", "_")
-            download_name = f"compressed_{safe_name}"
+            download_name = f"{safe_name}"
 
-            # 6. إرسال الملف (Flask يتعامل مع العربية تلقائيًا عبر UTF-8)
+            # 6. إرسال الملف
             return send_file(
                 output_path,
                 as_attachment=True,
@@ -173,16 +167,12 @@ def index():
             )
 
         except Exception as e:
-            # تسجيل الخطأ بالتفصيل في السيرفر
             logger.error(f"💥 Unexpected Error: {type(e).__name__} - {e}", exc_info=True)
             return "❌ حدث خطأ غير متوقع أثناء معالجة الملف.", 500
 
-    # عرض صفحة الرفع (GET request)
     return render_template("index.html")
 
 
 if __name__ == "__main__":
-    # تحديد المنفذ من متغيرات البيئة (مهم لـ Render/Heroku)
     port = int(os.environ.get("PORT", 5000))
-    # debug=False ضروري للأمان عند النشر
     app.run(host="0.0.0.0", port=port, debug=False)
