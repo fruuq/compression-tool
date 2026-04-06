@@ -14,4 +14,4 @@ RUN mkdir -p uploads compressed
 
 ENV PORT=10000
 # استخدام Gunicorn بدل app.run() للإنتاج
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:$PORT", "app:app"]
+CMD exec gunicorn -w 2 -b 0.0.0.0:$PORT app:app --log-file -
