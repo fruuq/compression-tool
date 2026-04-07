@@ -9,17 +9,17 @@ from PIL import Image
 
 app = Flask(__name__)
 
-# ⚙️ إعدادات التطبيق
+# ⚙️ Application Configuration
 app.config["UPLOAD_FOLDER"] = "uploads"
-app.config["COMPRESSED_FOLDER"] = "compressed"
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 🔒 10 ميجا كحد أقصى
+app.config["COMPRESSED_FOLDER"] = "compressed_output"  # Separate folder for compressed files
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 🔒 Max file size: 10 MB
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
 
-# إنشاء المجلدات تلقائيًا
+# Create folders automatically
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["COMPRESSED_FOLDER"], exist_ok=True)
 
-# 📝 إعداد نظام السجلات (Logging)
+# 📝 Logging Configuration
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -29,17 +29,17 @@ logger = logging.getLogger(__name__)
 
 
 def allowed_file(filename):
-    """التحقق من أن امتداد الملف مسموح"""
+    """Check if the file extension is allowed"""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def get_ghostscript_path():
-    """البحث عن مسار Ghostscript بشكل متوافق مع جميع الأنظمة"""
+    """Find Ghostscript path compatible with all systems"""
     for cmd in ["gswin64c", "gswin32c", "gs"]:
         path = shutil.which(cmd)
         if path:
             return path
-    # مسار احتياطي لويندوز
+    # Fallback path for Windows
     fallback = r"C:\Program Files\gs\gs10.06.0\bin\gswin64c.exe"
     if os.path.exists(fallback):
         return fallback
@@ -47,7 +47,7 @@ def get_ghostscript_path():
 
 
 def compress_pdf(input_path, output_path):
-    """ضغط ملف PDF باستخدام Ghostscript"""
+    """Compress PDF file using Ghostscript"""
     try:
         gs_path = get_ghostscript_path()
         subprocess.run([
@@ -63,39 +63,39 @@ def compress_pdf(input_path, output_path):
             input_path
         ], check=True, capture_output=True, text=True)
         
-        logger.info(f"✅ تم ضغط PDF: {os.path.basename(input_path)}")
+        logger.info(f"✅ PDF compressed successfully: {os.path.basename(input_path)}")
         return True
     except subprocess.CalledProcessError as e:
-        logger.error(f"❌ فشل ضغط PDF: {e.stderr.strip()}")
+        logger.error(f"❌ Failed to compress PDF: {e.stderr.strip()}")
         return False
     except Exception as e:
-        logger.error(f"❌ خطأ غير متوقع في ضغط PDF: {e}")
+        logger.error(f"❌ Unexpected error while compressing PDF: {e}")
         return False
 
 
 @app.errorhandler(413)
 def request_entity_too_large(error):
-    """معالجة خطأ حجم الملف الكبير"""
-    return "📦 حجم الملف يتجاوز 10 ميجا. يرجى اختيار ملف أصغر.", 413
+    """Handle file too large error"""
+    return "📦 File size exceeds 10 MB. Please choose a smaller file.", 413
 
 
 @app.errorhandler(500)
 def internal_error(error):
-    """معالجة الأخطاء الداخلية وعرض رسالة صديقة"""
+    """Handle internal server errors with a user-friendly message"""
     logger.error(f"💥 Internal Server Error: {error}", exc_info=True)
-    return "❌ حدث خطأ داخلي في الخادم. يرجى المحاولة لاحقًا.", 500
+    return "❌ An internal server error occurred. Please try again later.", 500
 
 
 @app.after_request
 def cleanup_temp_files(response):
-    """🗑️ حذف الملفات المؤقتة بعد إرسال الاستجابة للعميل"""
+    """🗑️ Delete temporary files after sending response to client"""
     if hasattr(g, "files_to_cleanup"):
         for file_path in g.files_to_cleanup:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except Exception as e:
-                logger.warning(f"⚠️ تعذر حذف الملف: {file_path} | {e}")
+                logger.warning(f"⚠️ Could not delete file: {file_path} | {e}")
     return response
 
 
@@ -103,38 +103,39 @@ def cleanup_temp_files(response):
 def index():
     if request.method == "POST":
         try:
-            # 1. التحقق من وجود الملف
+            # 1. Check if file exists in request
             if "file" not in request.files:
-                return "📁 لم يتم إرفاق أي ملف.", 400
+                return "📁 No file was attached.", 400
 
             file = request.files["file"]
             if file.filename == "":
-                return "📁 اسم الملف فارغ.", 400
+                return "📁 Filename is empty.", 400
 
-            # 2. التحقق من نوع الملف
+            # 2. Validate file type
             if not allowed_file(file.filename):
-                return "🚫 نوع الملف غير مدعوم. المسموح: PDF, JPG, PNG", 400
+                return "🚫 Unsupported file type. Allowed: PDF, JPG, PNG", 400
 
-            # 3. تجهيز المسارات
-            original_filename = file.filename
+            # 3. Prepare paths
+            original_filename = file.filename  # Keep original filename (Arabic/English/numbers)
             _, ext = os.path.splitext(original_filename)
             ext = ext.lower()
             
-            # اسم داخلي آمن للتخزين (UUID)
+            # Internal safe name for storage (UUID) - prevents conflicts
             safe_internal_name = f"{uuid.uuid4()}{ext}"
             
             input_path = os.path.join(app.config["UPLOAD_FOLDER"], safe_internal_name)
+            output_path = os.path.join(app.config["COMPRESSED_FOLDER"], safe_internal_name)
+            
+            # Save uploaded file with UUID name
             file.save(input_path)
 
-            output_path = os.path.join(app.config["COMPRESSED_FOLDER"], f"{safe_internal_name}")
-            
-            # تسجيل الملفات للحذف التلقائي لاحقًا
+            # Register files for automatic cleanup later
             g.files_to_cleanup = list({input_path, output_path})
 
-            # 4. عملية الضغط حسب النوع
+            # 4. Compression process based on file type
             if ext == ".pdf":
                 if not compress_pdf(input_path, output_path):
-                    logger.warning("⚠️ فشل ضغط PDF، سيتم إرسال الملف الأصلي.")
+                    logger.warning("⚠️ PDF compression failed, sending original file.")
                     output_path = input_path
 
             elif ext in [".jpg", ".jpeg"]:
@@ -144,7 +145,7 @@ def index():
                             output_path, "JPEG", quality=60, optimize=True, progressive=True
                         )
                 except Exception as e:
-                    logger.error(f"❌ خطأ في ضغط JPEG: {e}")
+                    logger.error(f"❌ Error compressing JPEG: {e}")
                     output_path = input_path
 
             elif ext == ".png":
@@ -152,23 +153,24 @@ def index():
                     with Image.open(input_path) as img:
                         img.save(output_path, "PNG", optimize=True, compress_level=9)
                 except Exception as e:
-                    logger.error(f"❌ خطأ في ضغط PNG: {e}")
+                    logger.error(f"❌ Error compressing PNG: {e}")
                     output_path = input_path
 
-            # ✅ 5. تجهيز الاسم للتحميل: يحافظ على العربي/الإنجليزي كما هو + compressed_
-            safe_name = original_filename.replace("/", "_").replace("\\", "_")
-            download_name = f"{safe_name}"
+            # ✅ 5. Prepare download name: preserve original filename exactly (Arabic/English/numbers)
+            # Sanitize only path separators to prevent directory traversal
+            safe_download_name = original_filename.replace("/", "_").replace("\\", "_")
 
-            # 6. إرسال الملف
+            # 6. Send file with original filename - no suffix added by browser
             return send_file(
                 output_path,
                 as_attachment=True,
-                download_name=download_name
+                download_name=safe_download_name,  # This ensures exact original name in download
+                mimetype="application/octet-stream"  # Force download for all file types
             )
 
         except Exception as e:
             logger.error(f"💥 Unexpected Error: {type(e).__name__} - {e}", exc_info=True)
-            return "❌ حدث خطأ غير متوقع أثناء معالجة الملف.", 500
+            return "❌ An unexpected error occurred while processing the file.", 500
 
     return render_template("index.html")
 
